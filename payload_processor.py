@@ -36,7 +36,6 @@ shotgun = shotgun_api3.Shotgun(
 )
 
 
-
 async def parse_shotgrid_payload(payload: Dict[str, Any]) -> None:
     """
     Parse and process ShotGrid webhook payload.
@@ -75,6 +74,7 @@ async def parse_shotgrid_payload(payload: Dict[str, Any]) -> None:
         if entity_type == "Task" and project_id and entity_id:
             await process_task(project_id, entity_id)
 
+
         # Example: Process based on event type
         # if event_type == "Shotgun_Task_Change":
         #     await process_task_change(payload, attribute_name, old_value, new_value)
@@ -89,42 +89,84 @@ async def parse_shotgrid_payload(payload: Dict[str, Any]) -> None:
         logger.error(f"❌ Error processing payload: {e}", exc_info=True)
 
 
-async def process_task_change(
-    payload: Dict[str, Any], attribute_name: str, old_value: Any, new_value: Any
-) -> None:
-    """Handle Task change events."""
-    logger.info(f"Processing task change: {attribute_name}")
-    logger.info(f"  Old: {old_value} → New: {new_value}")
 
-    # Add your task change logic here
-    # For example:
-    # - Update USD files
-    # - Trigger toolkit actions
-    # - Send notifications
-    await asyncio.sleep(5)  # Simulate heavy processing
-
-
-async def process_new_task(payload: Dict[str, Any]) -> None:
-    """Handle new Task creation events."""
-    logger.info("Processing new task creation")
-
-    # Add your new task logic here
-    await asyncio.sleep(3)  # Simulate heavy processing
-
-
-async def process_task(project_id: int, entity_id: int):
-
+async def process_task(project_id: int, task_id: int):
     filters = [
-        ["entity", "is", {"id": entity_id, "type": "Task"}],
+        ["id", "is", task_id],
         ["project", "is", {"id": project_id, "type": "Project"}],
     ]
-    fields = ["path", "version_number"]
+    fields = ["entity"]
 
-
-    tttask = shotgun.find(
+    tasks = shotgun.find(
         "Task",
         filters=filters,
         fields=fields,
     )
 
-    logger.info(f"Youpirrr {tttask}")
+    if not tasks:
+        logger.info(f"No task found with id {task_id} in project with id {project_id}")
+        return
+
+    if len(tasks) > 1:
+        logger.info("Multiple results, should never happen")
+        return
+
+    entity = tasks[0].get("entity", {})
+
+    if not entity:
+        logger.info(f"No entity linked to task with id {task_id}")
+        return
+
+    logger.info(f"Entity linked to current task is: {entity}")
+
+    #### Now we can bootstrap
+
+
+    #Authenticate using a pre-defined script user.
+    sa = sgtk.authentication.ShotgunAuthenticator()
+
+    user = sa.create_script_user(
+        api_script=sg_env_vars.SHOTGUN_WEBHOOK_SCRIPT_USER,
+        api_key=sg_env_vars.SHOTGUN_WEBHOOK_SCRIPT_KEY.get_secret_value(),
+        host=sg_env_vars.SHOTGUN_SITE
+    )
+    sgtk.set_authenticated_user(user)
+
+    mgr = sgtk.bootstrap.ToolkitManager(user)
+    mgr.base_configuration = "sgtk:descriptor:app_store?name=tk-config-basic"
+    mgr.plugin_id = "basic.*"
+    mgr.pipeline_configuration = "Primary"
+    mgr.pre_engine_start_callback = lambda ctx: ctx.sgtk.synchronize_filesystem_structure()
+    engine = mgr.bootstrap_engine("tk-shell", entity={"type": entity.get("type"), "id": entity.get("id")}) 
+
+    logger.info(f"Engine used: {engine}")
+
+
+    context = engine.sgtk.context_from_entity(entity.get("type"), entity.get("id"))
+    logger.info(f"Context: {context.to_dict()}")
+
+    # Important : destroy the engine
+    engine.destroy()
+
+    # framework = engine.sgtk.load_framework("tk-framework-dubrolusd")
+    # fw = sgtk.platform.get_framework("tk-framework-dubrolusd")
+    # logger.info(f"Framework: {fw}")
+
+
+
+
+    # fw = xxxxxxxxxxx.frameworks["tk-framework-dubrolusd"]
+
+    # rlmod = fw.import_module("rootlayer_manager")
+
+    # # Use the init time of the app to check if a usd master file exists for the current entity
+    # # TODO : I should create the usd master as soon as the entity is created in Shotgrid...
+    # rlman = rlmod.RootLayerManager(fw, context)
+
+    # usd_master_path = rlman.get_latest_usdmaster_from_context()
+
+    # if not usd_master_path:
+    #     rlman.create_entity_usdmaster()
+    # else:
+    #     if not rlman.validate_entity_usdmaster(usd_master_path):
+    #         rlman.create_entity_usdmaster()
