@@ -4,8 +4,7 @@ import hashlib
 import os
 import sys
 import json
-import sgtk
-import shotgun_api3
+
 
 from pxr import Usd, Sdf
 from pprint import pprint
@@ -14,7 +13,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from payload_processor import parse_shotgrid_payload
 
-
 class SgEnvVars(BaseSettings):
     SHOTGUN_SITE: str
     SHOTGUN_WEBHOOK_SCRIPT_USER: str
@@ -22,14 +20,9 @@ class SgEnvVars(BaseSettings):
     SHOTGUN_WEBHOOK_SECRET: SecretStr
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
+
 sg_env_vars = SgEnvVars()
 
-# shotgun api connection
-shotgun = shotgun_api3.Shotgun(
-    sg_env_vars.SHOTGUN_SITE,
-    sg_env_vars.SHOTGUN_WEBHOOK_SCRIPT_USER,
-    sg_env_vars.SHOTGUN_WEBHOOK_SCRIPT_KEY.get_secret_value())
-print(shotgun)
 
 
 def verify_signature(body: bytes, received_signature: str) -> bool:
@@ -47,9 +40,6 @@ def verify_signature(body: bytes, received_signature: str) -> bool:
 
 app = FastAPI()
 
-@app.get("/")
-def hello():
-    return {"message": "ShotGrid webhook receiver is running"}
 
 
 
@@ -69,9 +59,6 @@ async def sg_task_webhook(request: Request, background_tasks: BackgroundTasks):
 
     # At this point: request is authentic ✅
     payload = await request.json()
-
-
-
 
     # Add the processing task to background (non-blocking!)
     background_tasks.add_task(parse_shotgrid_payload, payload)
