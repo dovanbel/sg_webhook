@@ -47,7 +47,7 @@ async def parse_shotgrid_payload(payload: Dict[str, Any]) -> None:
     try:
         logger.info("Starting payload processing...")
 
-        pprint(payload)
+        # pprint(payload)
 
         payload_data = payload.get("data", {})
 
@@ -61,29 +61,12 @@ async def parse_shotgrid_payload(payload: Dict[str, Any]) -> None:
             f"Event: {event_type} | Entity: {entity_type} (id: {entity_id}) | Project id: {project_id}"
         )
 
-        # Extract meta information
-        # meta = payload.get("meta", {})
-        # attribute_name = meta.get("attribute_name")
-        # old_value = meta.get("old_value")
-        # new_value = meta.get("new_value")
-
-        # Simulate processing that takes time
-        # Replace this with your actual business logic
-        # await asyncio.sleep(1)  # Simulating work
 
         if entity_type == "Task" and project_id and entity_id:
             await process_task(project_id, entity_id)
 
 
-        # Example: Process based on event type
-        # if event_type == "Shotgun_Task_Change":
-        #     await process_task_change(payload, attribute_name, old_value, new_value)
-        # elif event_type == "Shotgun_Task_New":
-        #     await process_new_task(payload)
-        # else:
-        #     logger.info(f"Unhandled event type: {event_type}")
-
-        logger.info("✅ Payload processing complete")
+        # logger.info("✅ Payload processing complete")
 
     except Exception as e:
         logger.error(f"❌ Error processing payload: {e}", exc_info=True)
@@ -137,36 +120,36 @@ async def process_task(project_id: int, task_id: int):
     mgr.plugin_id = "basic.*"
     mgr.pipeline_configuration = "Primary"
     mgr.pre_engine_start_callback = lambda ctx: ctx.sgtk.synchronize_filesystem_structure()
+    # Bootstrap the tk-shell engine
     engine = mgr.bootstrap_engine("tk-shell", entity={"type": entity.get("type"), "id": entity.get("id")}) 
 
-    logger.info(f"Engine used: {engine}")
-
+    usdfw = engine.frameworks.get("tk-framework-dubrolusd")
+    if not usdfw:
+        logger.info(f"Could not find a 'tk-framework-dubrolusd' in the frameworks of engine: {engine} ")
+        engine.destroy()
+        return
 
     context = engine.sgtk.context_from_entity(entity.get("type"), entity.get("id"))
     logger.info(f"Context: {context.to_dict()}")
 
+
+    rlmod = usdfw.import_module("rootlayer_manager")
+    rlman = rlmod.RootLayerManager(usdfw, context)
+
+    usd_master_path = rlman.get_latest_usdmaster_from_context()
+
+    if not usd_master_path:
+        logger.info(f"No usd master file found for entity: {context.entity}, will create and publish one")
+        rlman.create_entity_usdmaster()
+    elif not rlman.validate_entity_usdmaster(usd_master_path):
+        logger.info(f"Usd master file: {usd_master_path} found for entity: {context.entity}. "
+                    "However, it is not correct, will create and publish a new version")
+        rlman.create_entity_usdmaster()
+    else:
+        logger.info(f"Found usd master file: {usd_master_path} for entity {context.entity}. It is correct, nothing to do")
+
     # Important : destroy the engine
     engine.destroy()
 
-    # framework = engine.sgtk.load_framework("tk-framework-dubrolusd")
-    # fw = sgtk.platform.get_framework("tk-framework-dubrolusd")
-    # logger.info(f"Framework: {fw}")
 
 
-
-
-    # fw = xxxxxxxxxxx.frameworks["tk-framework-dubrolusd"]
-
-    # rlmod = fw.import_module("rootlayer_manager")
-
-    # # Use the init time of the app to check if a usd master file exists for the current entity
-    # # TODO : I should create the usd master as soon as the entity is created in Shotgrid...
-    # rlman = rlmod.RootLayerManager(fw, context)
-
-    # usd_master_path = rlman.get_latest_usdmaster_from_context()
-
-    # if not usd_master_path:
-    #     rlman.create_entity_usdmaster()
-    # else:
-    #     if not rlman.validate_entity_usdmaster(usd_master_path):
-    #         rlman.create_entity_usdmaster()
