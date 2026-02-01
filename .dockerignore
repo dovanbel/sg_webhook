@@ -13,12 +13,12 @@ build/
 venv/
 ENV/
 
-# Environment files - NEVER commit secrets!
+# Environment files (will be provided via docker-compose)
 .env
 
-# Logs - don't commit log files
-logs/
-*.log
+# Git
+.git/
+.gitignore
 
 # IDE
 .vscode/
@@ -31,6 +31,11 @@ logs/
 htmlcov/
 .coverage
 
-# OS
-.DS_Store
-Thumbs.db
+# Documentation
+*.md
+docs/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore

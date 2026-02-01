@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  shotgrid-webhook:
+    # Option 1: Build locally
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    # Option 2: Pull from GitHub Container Registry (ghcr.io)
+    # Uncomment this and comment out the 'build' section above when using pre-built image
+    # image: ghcr.io/YOUR_GITHUB_USERNAME/shotgrid-webhook:latest
+    
+    container_name: shotgrid-webhook
+    ports:
+      - "9222:9222"
+    environment:
+      - SHOTGUN_SITE=${SHOTGUN_SITE}
+      - SHOTGUN_WEBHOOK_SCRIPT_USER=${SHOTGUN_WEBHOOK_SCRIPT_USER}
+      - SHOTGUN_WEBHOOK_SCRIPT_KEY=${SHOTGUN_WEBHOOK_SCRIPT_KEY}
+      - SHOTGUN_WEBHOOK_SECRET=${SHOTGUN_WEBHOOK_SECRET}
+      - ENVIRONMENT=production  # Disables /docs, /redoc, /openapi.json endpoints
+      - LOG_DIR=/app/logs
+    
+    volumes:
+      # Mount logs directory to host for persistence
+      - ./logs:/app/logs
+    
+    restart: unless-stopped
+    
+    # Optional: add health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9222/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
